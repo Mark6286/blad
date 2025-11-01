@@ -3,11 +3,7 @@
   "description": "A lightweight Blade-like PHP template engine with caching, directives, and debug support.",
   "type": "library",
   "license": "MIT",
-  "autoload": {
-    "psr-4": {
-      "Blad\\": "src/"
-    }
-  },
+  "keywords": ["template", "blade", "php", "engine", "view", "compiler"],
   "authors": [
     {
       "name": "Reymark Balaod",
@@ -15,7 +11,23 @@
     }
   ],
   "require": {
-    "php": ">=7.4"
+    "php": ">=7.4",
+    "matthiasmullie/minify": "^1.3",
+    "voku/html-min": "^4.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "Blad\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Blad\\Tests\\": "tests/"
+    }
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
   },
   "minimum-stability": "stable"
 }

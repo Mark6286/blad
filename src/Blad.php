@@ -17,7 +17,7 @@ use Exception;
  * Author: Reymark Balaod
  * License: MIT
  */
-class Blad
+class Blad extends Minifier
 {
     protected static string $viewsPath = './resources/views';
     protected static $cachePath = './storage/cache/views'; // string|false
@@ -124,7 +124,7 @@ class Blad
         if (!file_exists($cachePath) || filemtime($sourcePath) > filemtime($cachePath)) {
             $raw = file_get_contents($sourcePath);
             $compiled = self::processAll($raw, $data);
-            file_put_contents($cachePath, "<?php use Blad\\Blad; ?>\n?>$compiled");
+            file_put_contents($cachePath, self::minifyTemplate("<?php use Blad\\Blad; ?>\n?>$compiled"));
         }
 
         extract($data);
