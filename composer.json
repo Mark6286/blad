@@ -1,0 +1,21 @@
+{
+  "name": "reymark/blad",
+  "description": "A lightweight Blade-like PHP template engine with caching, directives, and debug support.",
+  "type": "library",
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "Blad\\": "src/"
+    }
+  },
+  "authors": [
+    {
+      "name": "Reymark Balaod",
+      "email": "reymarkbalaod@gmail.com"
+    }
+  ],
+  "require": {
+    "php": ">=7.4"
+  },
+  "minimum-stability": "stable"
+}
