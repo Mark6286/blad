@@ -1,5 +1,4 @@
 <?php
-
 namespace Blad;
 
 use MatthiasMullie\Minify;
@@ -12,6 +11,16 @@ class Minifier
      */
     public static function minifyTemplate(string $content): string
     {
+        // Protect Blade-like tags ({{ }}, {!! !!}, @directive)
+        $replacements = [];
+
+        // Replace {{ }} and {!! !!} with safe markers
+        $content = preg_replace_callback('/({{\s*.*?\s*}}|{!!\s*.*?\s*!!}|@\w+)/', function ($matches) use (&$replacements) {
+            $key                = '__BLADE__' . count($replacements) . '__';
+            $replacements[$key] = $matches[1];
+            return $key;
+        }, $content);
+
         // 1️⃣ Minify inline JS
         $content = preg_replace_callback('/<script\b[^>]*>([\s\S]*?)<\/script>/i', function ($matches) {
             $minifier = new Minify\JS($matches[1]);
@@ -24,16 +33,18 @@ class Minifier
             return '<style>' . $minifier->minify() . '</style>';
         }, $content);
 
-        // 3️⃣ Minify the HTML itself
+        // 3️⃣ Minify HTML safely
         $htmlMin = new HtmlMin();
         $htmlMin
             ->doRemoveComments(true)
             ->doRemoveSpacesBetweenTags(true)
             ->doOptimizeAttributes(true)
-            ->doRemoveWhitespaceAroundTags(true)
-            ->doMakeSameDomainsLinksRelative([]);
+            ->doRemoveWhitespaceAroundTags(true);
 
         $content = $htmlMin->minify($content);
+
+        // Restore Blade placeholders
+        $content = strtr($content, $replacements);
 
         return trim($content);
     }
