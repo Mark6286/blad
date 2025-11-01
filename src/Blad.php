@@ -21,7 +21,7 @@ class Blad extends Minifier
 {
     protected static string $viewsPath = './resources/views';
     protected static $cachePath = './storage/cache/views'; // string|false
-    protected static string $ext = '.blade.php';
+    protected static string $ext = '.blad.php';
     protected static array  $sections = [];
     protected static array  $globals  = [];
     protected static string $layout   = '';
