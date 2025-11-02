@@ -124,7 +124,7 @@ class Blad extends Minifier
         if (!file_exists($cachePath) || filemtime($sourcePath) > filemtime($cachePath)) {
             $raw = file_get_contents($sourcePath);
             $compiled = self::processAll($raw, $data);
-            file_put_contents($cachePath, "<?php use Blad\\Blad; ?>\n?>$compiled");
+            file_put_contents($cachePath, "<?php use Blad\\Blad; ?>$compiled");
         }
 
         extract($data);
