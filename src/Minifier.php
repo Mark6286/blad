@@ -11,15 +11,19 @@ class Minifier
      */
     public static function minifyTemplate(string $content): string
     {
-        // Protect Blade-like tags ({{ }}, {!! !!}, @directive)
+        // Protect PHP and Blade-like tags
         $replacements = [];
 
-        // Replace {{ }} and {!! !!} with safe markers
-        $content = preg_replace_callback('/({{\s*.*?\s*}}|{!!\s*.*?\s*!!}|@\w+)/', function ($matches) use (&$replacements) {
-            $key                = '__BLADE__' . count($replacements) . '__';
-            $replacements[$key] = $matches[1];
-            return $key;
-        }, $content);
+        // Protect PHP blocks and Blade tags
+        $content = preg_replace_callback(
+            '/(<\?(?:php|=)?[\s\S]*?\?>|{{\s*.*?\s*}}|{!!\s*.*?\s*!!}|@\w+)/',
+            function ($matches) use (&$replacements) {
+                $key                = '__BLADEPHP__' . count($replacements) . '__';
+                $replacements[$key] = $matches[1];
+                return $key;
+            },
+            $content
+        );
 
         // 1️⃣ Minify inline JS
         $content = preg_replace_callback('/<script\b[^>]*>([\s\S]*?)<\/script>/i', function ($matches) {
@@ -33,7 +37,7 @@ class Minifier
             return '<style>' . $minifier->minify() . '</style>';
         }, $content);
 
-        // 3️⃣ Minify HTML safely
+        // 3️⃣ Minify HTML (safe)
         $htmlMin = new HtmlMin();
         $htmlMin
             ->doRemoveComments(true)
@@ -43,7 +47,7 @@ class Minifier
 
         $content = $htmlMin->minify($content);
 
-        // Restore Blade placeholders
+        // Restore PHP and Blade code
         $content = strtr($content, $replacements);
 
         return trim($content);
