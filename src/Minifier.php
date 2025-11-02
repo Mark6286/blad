@@ -25,11 +25,25 @@ class Minifier
             $content
         );
 
-        // 1️⃣ Minify inline JS
-        $content = preg_replace_callback('/<script\b[^>]*>([\s\S]*?)<\/script>/i', function ($matches) {
-            $minifier = new Minify\JS($matches[1]);
-            return '<script>' . $minifier->minify() . '</script>';
-        }, $content);
+        // ✅ Minify only inline JS (no "src" attribute)
+        $content = preg_replace_callback(
+            '/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/i',
+            function ($matches) {
+                $inner = trim($matches[1]);
+                if ($inner === '') {
+                    return $matches[0]; // skip empty scripts
+                }
+
+                try {
+                    $minifier = new Minify\JS($inner);
+                    return '<script>' . $minifier->minify() . '</script>';
+                } catch (\Exception $e) {
+                    // If minification fails, return original
+                    return $matches[0];
+                }
+            },
+            $content
+        );
 
         // 2️⃣ Minify inline CSS
         $content = preg_replace_callback('/<style\b[^>]*>([\s\S]*?)<\/style>/i', function ($matches) {

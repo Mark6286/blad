@@ -20,13 +20,13 @@ use Exception;
 class Blad extends Minifier
 {
     protected static string $viewsPath = './resources/views';
-    protected static $cachePath = './storage/cache/views'; // string|false
-    protected static string $ext = '.blad.php';
-    protected static array  $sections = [];
-    protected static array  $globals  = [];
-    protected static string $layout   = '';
-    protected static array  $directives = [];
-    protected static bool   $debug = false;
+    protected static $cachePath        = './storage/cache/views'; // string|false
+    protected static string $ext       = '.blad.php';
+    protected static array $sections   = [];
+    protected static array $globals    = [];
+    protected static string $layout    = '';
+    protected static array $directives = [];
+    protected static bool $debug       = false;
 
     // ===== Configuration =====
 
@@ -42,7 +42,10 @@ class Blad extends Minifier
             return;
         }
         self::$cachePath = rtrim($path, '/');
-        if (!is_dir(self::$cachePath)) mkdir(self::$cachePath, 0777, true);
+        if (! is_dir(self::$cachePath)) {
+            mkdir(self::$cachePath, 0777, true);
+        }
+
     }
 
     public static function setExtension(string $ext): void
@@ -86,11 +89,14 @@ class Blad extends Minifier
             self::$sections = [];
             self::$layout   = '';
 
-            $data = array_merge(self::getGlobals(), $data);
+            $data    = array_merge(self::getGlobals(), $data);
             $content = self::compile($template, $data);
             $output  = self::$layout ? self::compile(self::$layout, $data) : $content;
 
-            if ($return) return $output;
+            if ($return) {
+                return $output;
+            }
+
             echo $output;
         } catch (Exception $e) {
             self::log("Render error in '{$template}': " . $e->getMessage());
@@ -105,13 +111,13 @@ class Blad extends Minifier
     protected static function compile(string $template, array $data): string
     {
         $sourcePath = self::$viewsPath . '/' . str_replace('.', '/', $template) . self::$ext;
-        if (!file_exists($sourcePath)) {
+        if (! file_exists($sourcePath)) {
             throw new Exception("View not found: {$template}");
         }
 
         // === No cache mode ===
         if (self::$cachePath === false) {
-            $raw = file_get_contents($sourcePath);
+            $raw      = file_get_contents($sourcePath);
             $compiled = self::processAll($raw, $data);
             ob_start();
             extract($data);
@@ -121,8 +127,8 @@ class Blad extends Minifier
 
         // === Cached mode ===
         $cachePath = self::$cachePath . '/' . sha1($sourcePath) . '.php';
-        if (!file_exists($cachePath) || filemtime($sourcePath) > filemtime($cachePath)) {
-            $raw = file_get_contents($sourcePath);
+        if (! file_exists($cachePath) || filemtime($sourcePath) > filemtime($cachePath)) {
+            $raw      = file_get_contents($sourcePath);
             $compiled = self::processAll($raw, $data);
             file_put_contents($cachePath, "<?php use Blad\\Blad; ?>$compiled");
         }
@@ -215,15 +221,46 @@ class Blad extends Minifier
         $raw = str_replace('@csrf', self::csrfToken(), $raw);
 
         $raw = preg_replace_callback('/@css\(["\'](.+?)["\']\)/', function ($m) {
-            $file = self::$viewsPath . '/../resources/libs/' . $m[1];
-            $v = file_exists($file) ? filemtime($file) : time();
-            return "<link rel=\"stylesheet\" href=\"/resources/libs/{$m[1]}?v={$v}\">";
+            $file = '/../assets/' . $m[1];
+            $v    = file_exists($file) ? filemtime($file) : time();
+            return "<link rel=\"stylesheet\" href=\"/assets/{$m[1]}?v={$v}\">";
         }, $raw);
 
         $raw = preg_replace_callback('/@js\(["\'](.+?)["\']\)/', function ($m) {
-            $file = self::$viewsPath . '/../resources/libs/' . $m[1];
-            $v = file_exists($file) ? filemtime($file) : time();
-            return "<script src=\"/resources/libs/{$m[1]}?v={$v}\"></script>";
+            $file = '/../assets/' . $m[1];
+            $v    = file_exists($file) ? filemtime($file) : time();
+            return "<script src=\"/assets/{$m[1]}?v={$v}\"></script>";
+        }, $raw);
+
+        $raw = preg_replace_callback('/@cdn\(([^)]+)\)/', function ($m) {
+            $urls = array_map('trim', explode(',', str_replace(['"', "'"], '', $m[1])));
+            $html = '';
+
+            foreach ($urls as $url) {
+                // Detect CSS (normal .css, or Google Fonts, or Cloudflare CSS)
+                if (
+                    preg_match('/\.css(\?|$)/i', $url) ||
+                    str_contains($url, 'fonts.googleapis.com') ||
+                    str_contains($url, 'fontawesome') ||
+                    str_contains($url, 'css2?')
+                ) {
+                    $html .= "<link rel=\"stylesheet\" href=\"{$url}\">\n";
+                }
+                // Detect JS (ends with .js or jsdelivr/unpkg script)
+                elseif (
+                    preg_match('/\.js(\?|$)/i', $url) ||
+                    str_contains($url, 'jsdelivr') ||
+                    str_contains($url, 'unpkg')
+                ) {
+                    $html .= "<script src=\"{$url}\"></script>\n";
+                }
+                // Default fallback: assume JS
+                else {
+                    $html .= "<script src=\"{$url}\"></script>\n";
+                }
+            }
+
+            return $html;
         }, $raw);
 
         return $raw;
@@ -232,23 +269,23 @@ class Blad extends Minifier
     protected static function compileControlStructures(string $raw): string
     {
         $map = [
-            '/@if\s*\((.*?)\)/'        => '<?php if ($1): ?>',
-            '/@elseif\s*\((.*?)\)/'    => '<?php elseif ($1): ?>',
-            '/@else\b/'                => '<?php else: ?>',
-            '/@endif\b/'               => '<?php endif; ?>',
-            '/@foreach\s*\((.*?)\)/'   => '<?php foreach ($1): ?>',
-            '/@endforeach\b/'          => '<?php endforeach; ?>',
-            '/@for\s*\((.*?)\)/'       => '<?php for ($1): ?>',
-            '/@endfor\b/'              => '<?php endfor; ?>',
-            '/@while\s*\((.*?)\)/'     => '<?php while ($1): ?>',
-            '/@endwhile\b/'            => '<?php endwhile; ?>',
-            '/@switch\s*\((.*?)\)/'    => '<?php switch($1): ?>',
-            '/@case\s*\((.*?)\)/'      => '<?php case $1: ?>',
-            '/@break\b/'               => '<?php break; ?>',
-            '/@default\b/'             => '<?php default: ?>',
-            '/@endswitch\b/'           => '<?php endswitch; ?>',
-            '/@php/'                   => '<?php ',
-            '/@endphp/'                => '?>'
+            '/@if\s*\((.*?)\)/'      => '<?php if ($1): ?>',
+            '/@elseif\s*\((.*?)\)/'  => '<?php elseif ($1): ?>',
+            '/@else\b/'              => '<?php else: ?>',
+            '/@endif\b/'             => '<?php endif; ?>',
+            '/@foreach\s*\((.*?)\)/' => '<?php foreach ($1): ?>',
+            '/@endforeach\b/'        => '<?php endforeach; ?>',
+            '/@for\s*\((.*?)\)/'     => '<?php for ($1): ?>',
+            '/@endfor\b/'            => '<?php endfor; ?>',
+            '/@while\s*\((.*?)\)/'   => '<?php while ($1): ?>',
+            '/@endwhile\b/'          => '<?php endwhile; ?>',
+            '/@switch\s*\((.*?)\)/'  => '<?php switch($1): ?>',
+            '/@case\s*\((.*?)\)/'    => '<?php case $1: ?>',
+            '/@break\b/'             => '<?php break; ?>',
+            '/@default\b/'           => '<?php default: ?>',
+            '/@endswitch\b/'         => '<?php endswitch; ?>',
+            '/@php/'                 => '<?php ',
+            '/@endphp/'              => '?>',
         ];
         return preg_replace(array_keys($map), array_values($map), $raw);
     }
@@ -265,8 +302,14 @@ class Blad extends Minifier
 
     protected static function csrfToken(): string
     {
-        if (!isset($_SESSION)) session_start();
-        if (!isset($_SESSION['_csrf_token'])) $_SESSION['_csrf_token'] = bin2hex(random_bytes(32));
+        if (! isset($_SESSION)) {
+            session_start();
+        }
+
+        if (! isset($_SESSION['_csrf_token'])) {
+            $_SESSION['_csrf_token'] = bin2hex(random_bytes(32));
+        }
+
         return $_SESSION['_csrf_token'];
     }
 
@@ -281,7 +324,7 @@ class Blad extends Minifier
     {
         foreach (self::$directives as $name => $callback) {
             $pattern = '/@' . preg_quote($name, '/') . '\((.*?)\)/';
-            $raw = preg_replace_callback($pattern, fn($m) => call_user_func($callback, trim($m[1])), $raw);
+            $raw     = preg_replace_callback($pattern, fn($m) => call_user_func($callback, trim($m[1])), $raw);
         }
         return $raw;
     }
@@ -303,7 +346,10 @@ class Blad extends Minifier
     public static function clearCache(): void
     {
         if (self::$cachePath && is_dir(self::$cachePath)) {
-            foreach (glob(self::$cachePath . '/*.php') as $file) unlink($file);
+            foreach (glob(self::$cachePath . '/*.php') as $file) {
+                unlink($file);
+            }
+
         }
     }
 }
