@@ -164,10 +164,9 @@ class Blad extends Minifier
     }
 
     // ===== Compilers =====
-
     protected static function stripComments(string $raw): string
     {
-        return preg_replace('/{{--.*?--}}/s', '', $raw);
+        return preg_replace('/<!--[\s\S]*?-->/', '', $raw);
     }
 
     protected static function handleExtends(string $content, array $data): string
