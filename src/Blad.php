@@ -112,7 +112,7 @@ class Blad extends Minifier
     {
         $sourcePath = self::$viewsPath . '/' . str_replace('.', '/', $template) . self::$ext;
         if (! file_exists($sourcePath)) {
-            throw new Exception("View not found: {$template}");
+            throw new Exception("View not found: {$template}, {$sourcePath}");
         }
 
         // === No cache mode ===
@@ -127,6 +127,7 @@ class Blad extends Minifier
 
         // === Cached mode ===
         $cachePath = self::$cachePath . '/' . sha1($sourcePath) . '.php';
+
         if (! file_exists($cachePath) || filemtime($sourcePath) > filemtime($cachePath)) {
             $raw      = file_get_contents($sourcePath);
             $compiled = self::processAll($raw, $data);
@@ -144,7 +145,11 @@ class Blad extends Minifier
     protected static function processAll(string $raw, array $data): string
     {
         $raw = self::stripComments($raw);
-        $raw = self::handleExtends($raw);
+
+        if (preg_match('/@extends\([\'"](.+?)[\'"]\)/', $raw, $match)) {
+            $raw = self::handleExtends($raw, $data);
+        }
+
         $raw = self::extractSections($raw);
         $raw = self::compileIncludes($raw, $data);
         $raw = self::compileYields($raw, $data);
@@ -165,13 +170,37 @@ class Blad extends Minifier
         return preg_replace('/{{--.*?--}}/s', '', $raw);
     }
 
-    protected static function handleExtends(string $raw): string
+    protected static function handleExtends(string $content, array $data): string
     {
-        if (preg_match('/@extends\(["\'](.+?)["\']\)/', $raw, $m)) {
-            self::$layout = str_replace('.', '/', $m[1]);
-            return str_replace($m[0], '', $raw);
+        if (! preg_match('/@extends\([\'"](.+?)[\'"]\)/', $content, $match)) {
+            return $content;
         }
-        return $raw;
+
+        $layoutName = $match[1];
+        $content    = preg_replace('/@extends\([\'"].+?[\'"]\)/', '', $content);
+
+        // Extract child sections
+        $sections = [];
+        if (preg_match_all('/@section\([\'"](.+?)[\'"]\)([\s\S]*?)@endsection/', $content, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $sections[$m[1]] = trim($m[2]);
+            }
+        }
+
+        // Load parent layout
+        $layoutPath = self::$viewsPath . '/' . str_replace('.', '/', $layoutName) . self::$ext;
+        if (! file_exists($layoutPath)) {
+            throw new Exception("Layout not found: {$layoutName}");
+        }
+
+        $layoutRaw = file_get_contents($layoutPath);
+
+        // Replace @yield placeholders with section content
+        $merged = preg_replace_callback('/@yield\([\'"](.+?)[\'"]\)/', function ($m) use ($sections) {
+            return $sections[$m[1]] ?? '';
+        }, $layoutRaw);
+
+        return $merged;
     }
 
     protected static function extractSections(string $raw): string
@@ -192,15 +221,59 @@ class Blad extends Minifier
 
     protected static function compileIncludes(string $raw, array $data): string
     {
+        // === @include("file") ===
         $raw = preg_replace_callback('/@include\(["\'](.+?)["\']\)/', function ($m) use ($data) {
-            return self::compile($m[1], $data);
+            $view = $m[1];
+            $file = self::resolveIncludePath($view);
+
+            if (! file_exists($file)) {
+                throw new Exception("Include file not found or outside resources: {$view}");
+            }
+
+            $content = file_get_contents($file);
+            return self::processAll($content, $data);
         }, $raw);
 
+        // === @includeWhen(condition, "file") ===
         $raw = preg_replace_callback('/@includeWhen\((.+?),\s*["\'](.+?)["\']\)/', function ($m) use ($data) {
-            return "<?php if ({$m[1]}) echo \\Blad\\Blad::render('{$m[2]}', get_defined_vars(), true); ?>";
+            $condition = trim($m[1]);
+            $view      = trim($m[2]);
+            $file      = self::resolveIncludePath($view);
+
+            // Safe path check
+            $escapedFile = addslashes($file);
+            return "<?php if ({$condition}) { echo \\Blad\\Blad::renderFile('{$escapedFile}', get_defined_vars()); } ?>";
         }, $raw);
 
         return $raw;
+    }
+
+    protected static function resolveIncludePath(string $view): string
+    {
+        // Base directories
+        $viewsDir     = realpath(self::$viewsPath);
+        $resourcesDir = realpath(dirname($viewsDir)); // usually /resources
+
+        // Convert dot notation → path
+        $relativePath = str_replace('.', '/', $view);
+        $tryPaths     = [
+            "{$viewsDir}/{$relativePath}" . self::$ext,
+            "{$resourcesDir}/{$relativePath}" . self::$ext,
+            "{$resourcesDir}/{$relativePath}.php",
+            "{$resourcesDir}/{$relativePath}.html",
+        ];
+
+        foreach ($tryPaths as $path) {
+            if (file_exists($path)) {
+                // Prevent escaping outside resources/
+                $realPath = realpath($path);
+                if (strpos($realPath, $resourcesDir) === 0) {
+                    return $realPath;
+                }
+            }
+        }
+
+        throw new Exception("Include not found: {$view}");
     }
 
     protected static function compilePartial(string $raw, array $data): string
