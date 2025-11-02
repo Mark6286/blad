@@ -124,7 +124,7 @@ class Blad extends Minifier
         if (!file_exists($cachePath) || filemtime($sourcePath) > filemtime($cachePath)) {
             $raw = file_get_contents($sourcePath);
             $compiled = self::processAll($raw, $data);
-            file_put_contents($cachePath, self::minifyTemplate("<?php use Blad\\Blad; ?>\n?>$compiled"));
+            file_put_contents($cachePath, "<?php use Blad\\Blad; ?>\n?>$compiled");
         }
 
         extract($data);
@@ -148,6 +148,7 @@ class Blad extends Minifier
         $raw = self::applyDirectives($raw);
         $raw = self::compileUnescaped($raw);
         $raw = self::compileEscaped($raw);
+        $raw = self::minifyTemplate($raw);
         return $raw;
     }
 
